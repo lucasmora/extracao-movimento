@@ -34,6 +34,15 @@ python extrator-movimento.py caminho/do/video.mp4
 - `--delay_frames`: número de frames para atrasar a comparação. Valores maiores permitem evidenciar mudanças acumuladas no vídeo (padrão: 5).
 
 
+## Exemplo visual
+
+Antes | Depois  
+
+*(Adicionar GIFs ou imagens comparando o vídeo original com a versão que evidencia movimento)*
+
+---
+
+
 ## Licença
 
 Este projeto está licenciado sob **CC BY-NC 4.0** — uso **não comercial** com atribuição.  

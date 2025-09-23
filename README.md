@@ -1,8 +1,8 @@
-# Motion Extraction com Python
+# Extração de Movimento com Python
 
 ![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python&logoColor=white) ![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey) ![Status](https://img.shields.io/badge/Status-Active-brightgreen)
 
-**Motion Extraction** é uma ferramenta desenvolvida em Python para **extrair e evidenciar movimento em vídeos**, analisando diferenças entre frames consecutivos. O projeto gera vídeos de saída com alterações de movimento claramente destacadas, permitindo a visualização detalhada de padrões que seriam difíceis de perceber a olho nu.  
+Ferramenta desenvolvida em Python para **extrair e evidenciar movimento em vídeos**, analisando diferenças entre frames consecutivos. O código gera vídeos de saída com alterações de movimento claramente destacadas, permitindo a visualização detalhada de padrões que seriam difíceis de perceber a olho nu.  
 Inspirado pelo vídeo [Motion Extraction](https://www.youtube.com/watch?v=NSS6yAMZF78), o projeto foi adaptado para Python com suporte a múltiplos formatos de vídeo e aceleração via GPU (OpenCL).
 
 ---
@@ -36,9 +36,11 @@ python extrator-movimento.py caminho/do/video.mp4
 
 ## Exemplo visual
 
-Antes | Depois  
+![normal_gif00086400](https://github.com/user-attachments/assets/af0543cc-5769-4913-afec-978bd35dfb5f)  
+_Entrada_
 
-*(Adicionar GIFs ou imagens comparando o vídeo original com a versão que evidencia movimento)*
+![cinza_gif00086400](https://github.com/user-attachments/assets/81b526a6-3df1-4271-9a42-65d25b3eef3d)  
+_Saída_ 
 
 ---
 

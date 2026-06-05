@@ -144,10 +144,16 @@ void MainWindow::setupUI() {
     m_timeLabel = new QLabel("00:00 / 00:00");
     m_timeLabel->setStyleSheet("color: #8b949e; font-size: 12px;");
 
+    m_hwIndicator = new QLabel("CPU");
+    m_hwIndicator->setStyleSheet(
+        "color: #484f58; font-size: 10px; padding: 0px 4px;");
+    m_hwIndicator->setFixedHeight(16);
+
     ctrlBox->addWidget(m_btnPlay);
     ctrlBox->addWidget(m_btnStop);
     ctrlBox->addWidget(m_slider, 1);
     ctrlBox->addWidget(m_timeLabel);
+    ctrlBox->addWidget(m_hwIndicator);
 
     previewRow->addWidget(origContainer, 1);
     previewRow->addWidget(procContainer, 1);
@@ -193,6 +199,7 @@ void MainWindow::onSelectVideo() {
     if (path.isEmpty()) return;
 
     m_inputPath = path;
+    m_previewFinished = false;
     QString fileName = QFileInfo(path).fileName();
     m_btnSelect->setText(fileName);
     m_btnSave->setEnabled(true);
@@ -207,6 +214,15 @@ void MainWindow::onSelectVideo() {
     m_previewProcessor->openVideo();
 
     m_player->open(path);
+    if (m_player->usingHardwareAccel()) {
+        m_hwIndicator->setText("GPU");
+        m_hwIndicator->setStyleSheet(
+            "color: #3fb950; font-size: 10px; padding: 0px 4px;");
+    } else {
+        m_hwIndicator->setText("CPU");
+        m_hwIndicator->setStyleSheet(
+            "color: #484f58; font-size: 10px; padding: 0px 4px;");
+    }
     m_btnPlay->setEnabled(true);
     m_btnStop->setEnabled(true);
     m_slider->setEnabled(true);
@@ -214,6 +230,7 @@ void MainWindow::onSelectVideo() {
 
 void MainWindow::onPlayPause() {
     if (!m_player->isPlaying()) {
+        m_previewFinished = false;
         m_previewProcessor->play();
         m_player->play();
         m_btnPlay->setText(QString::fromUtf8("\u23F8"));
@@ -225,8 +242,13 @@ void MainWindow::onPlayPause() {
 }
 
 void MainWindow::onStop() {
-    m_previewProcessor->stop();
-    m_player->stop();
+    if (m_previewFinished) {
+        m_previewProcessor->pause();
+        m_player->pause();
+    } else {
+        m_previewProcessor->stop();
+        m_player->stop();
+    }
     m_btnPlay->setText(QString::fromUtf8("\u25B6"));
 }
 
@@ -281,6 +303,7 @@ void MainWindow::onProgressChanged(int percent) {
 }
 
 void MainWindow::onPreviewFinished() {
+    m_previewFinished = true;
     m_statusLabel->setText("Processamento concluido!");
     m_btnPlay->setText(QString::fromUtf8("\u25B6"));
 }

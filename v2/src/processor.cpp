@@ -15,7 +15,9 @@ bool Processor::openVideo() {
     m_buffer.clear();
     m_previewRunning = false;
 
-    if (!m_cap.open(m_inputPath.toStdString()))
+    if (!m_cap.open(m_inputPath.toStdString(), cv::CAP_ANY, {
+            cv::CAP_PROP_HW_ACCELERATION, cv::VIDEO_ACCELERATION_D3D11
+        }))
         return false;
 
     m_fps = m_cap.get(cv::CAP_PROP_FPS);
@@ -117,8 +119,10 @@ QImage Processor::matToQImage(const cv::Mat& mat) {
 }
 
 void Processor::saveVideo(const QString& outputPath) {
-    cv::VideoCapture cap(m_inputPath.toStdString());
-    if (!cap.isOpened()) {
+    cv::VideoCapture cap;
+    if (!cap.open(m_inputPath.toStdString(), cv::CAP_ANY, {
+            cv::CAP_PROP_HW_ACCELERATION, cv::VIDEO_ACCELERATION_D3D11
+        })) {
         emit errorOccurred("Erro ao abrir video para salvar");
         return;
     }

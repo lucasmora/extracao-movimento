@@ -13,12 +13,16 @@ VideoPlayer::~VideoPlayer() {
 bool VideoPlayer::open(const QString& path) {
     m_cap.release();
     m_path = path;
-    if (!m_cap.open(path.toStdString()))
+    if (!m_cap.open(path.toStdString(), cv::CAP_ANY, {
+            cv::CAP_PROP_HW_ACCELERATION, cv::VIDEO_ACCELERATION_D3D11
+        }))
         return false;
 
     m_fps = m_cap.get(cv::CAP_PROP_FPS);
     m_totalFrames = static_cast<int>(m_cap.get(cv::CAP_PROP_FRAME_COUNT));
     m_playing = false;
+    m_hwAccel = (static_cast<int>(m_cap.get(cv::CAP_PROP_HW_ACCELERATION))
+                 == cv::VIDEO_ACCELERATION_D3D11);
 
     QImage first = readCurrentFrame();
     if (!first.isNull())

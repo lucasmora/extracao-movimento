@@ -23,6 +23,7 @@ public:
     bool isPlaying() const { return m_playing; }
     int totalFrames() const { return m_totalFrames; }
     double fps() const { return m_fps; }
+    bool usingHardwareAccel() const { return m_hwAccel; }
 
 signals:
     void frameReady(const QImage& image);
@@ -41,4 +42,5 @@ private:
     int m_totalFrames = 0;
     double m_fps = 0.0;
     bool m_playing = false;
+    bool m_hwAccel = false;
 };

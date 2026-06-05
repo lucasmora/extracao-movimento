@@ -52,6 +52,7 @@ private:
     QPushButton*  m_btnStop;
     QSlider*      m_slider;
     QLabel*       m_timeLabel;
+    QLabel*       m_hwIndicator;
     bool          m_seeking = false;
 
     Processor*    m_previewProcessor;
@@ -61,4 +62,5 @@ private:
     QThread*      m_saveThread = nullptr;
     Processor*    m_saveProcessor = nullptr;
     int           m_currentFrame = 0;
+    bool          m_previewFinished = false;
 };

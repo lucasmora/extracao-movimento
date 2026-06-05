@@ -44,13 +44,13 @@ void MainWindow::setupUI() {
 
     auto* delayLayout = new QHBoxLayout();
     auto* delayLabel = new QLabel("Delay:");
-    delayLabel->setStyleSheet("color: #ccc; font-size: 13px;");
+    delayLabel->setStyleSheet("color: #8b949e; font-size: 13px;");
     m_spinDelay = new QSpinBox();
     m_spinDelay->setRange(1, 60);
     m_spinDelay->setValue(5);
     m_spinDelay->setFixedWidth(60);
     auto* framesLabel = new QLabel("frames");
-    framesLabel->setStyleSheet("color: #ccc; font-size: 13px;");
+    framesLabel->setStyleSheet("color: #8b949e; font-size: 13px;");
     delayLayout->addWidget(delayLabel);
     delayLayout->addWidget(m_spinDelay);
     delayLayout->addWidget(framesLabel);
@@ -59,7 +59,9 @@ void MainWindow::setupUI() {
     m_btnSave->setEnabled(false);
     m_btnSave->setMinimumWidth(120);
     m_btnSave->setStyleSheet(
-        "QPushButton { font-weight: bold; padding: 6px 20px; }"
+        "QPushButton { background-color: #1f6feb; border-color: #1f6feb; font-weight: 600; padding: 6px 20px; }"
+        "QPushButton:hover { background-color: #388bfd; border-color: #388bfd; }"
+        "QPushButton:disabled { background-color: #21262d; border-color: #30363d; color: #484f58; }"
     );
 
     topRow->addWidget(m_btnSelect);
@@ -82,15 +84,14 @@ void MainWindow::setupUI() {
 
     auto makeView = [](const QString& title) -> QWidget* {
         auto* frame = new QFrame();
-        frame->setFrameStyle(QFrame::StyledPanel | QFrame::Sunken);
         frame->setStyleSheet(
-            "QFrame { background: #1e1e1e; border: 1px solid #444; border-radius: 6px; }");
+            "QFrame { background: #161b22; border: 1px solid #30363d; border-radius: 8px; }");
         auto* lay = new QVBoxLayout(frame);
         lay->setSpacing(6);
 
         auto* lbl = new QLabel(title);
         lbl->setAlignment(Qt::AlignCenter);
-        lbl->setStyleSheet("color: #ccc; font-weight: bold; font-size: 13px; "
+        lbl->setStyleSheet("color: #f0f6fc; font-weight: 600; font-size: 13px; "
                            "background: transparent; border: none;");
 
         auto* view = new QLabel();
@@ -99,7 +100,7 @@ void MainWindow::setupUI() {
         view->setMinimumSize(400, 280);
         view->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
         view->setText("(aguardando)");
-        view->setStyleSheet("color: #666; font-size: 16px; "
+        view->setStyleSheet("color: #484f58; font-size: 16px; "
                             "background: transparent; border: none;");
 
         lay->addWidget(lbl);
@@ -121,19 +122,19 @@ void MainWindow::setupUI() {
     // Player controls
     auto* ctrlFrame = new QFrame();
     ctrlFrame->setStyleSheet(
-        "QFrame { background: #2a2a2a; border: 1px solid #444; border-radius: 4px; }");
+        "QFrame { background: #161b22; border: 1px solid #30363d; border-radius: 8px; }");
     auto* ctrlBox = new QHBoxLayout(ctrlFrame);
     ctrlBox->setContentsMargins(8, 4, 8, 4);
 
     m_btnPlay = new QPushButton(QString::fromUtf8("\u25B6"));
     m_btnPlay->setFixedSize(36, 28);
     m_btnPlay->setEnabled(false);
-    m_btnPlay->setStyleSheet("font-size: 16px;");
+    m_btnPlay->setStyleSheet("QPushButton { font-size: 16px; padding: 0px; }");
 
     m_btnStop = new QPushButton(QString::fromUtf8("\u25A0"));
     m_btnStop->setFixedSize(36, 28);
     m_btnStop->setEnabled(false);
-    m_btnStop->setStyleSheet("font-size: 14px;");
+    m_btnStop->setStyleSheet("QPushButton { font-size: 14px; padding: 0px; }");
 
     m_slider = new QSlider(Qt::Horizontal);
     m_slider->setRange(0, 1000);
@@ -141,7 +142,7 @@ void MainWindow::setupUI() {
     m_slider->setEnabled(false);
 
     m_timeLabel = new QLabel("00:00 / 00:00");
-    m_timeLabel->setStyleSheet("color: #aaa; font-size: 12px;");
+    m_timeLabel->setStyleSheet("color: #8b949e; font-size: 12px;");
 
     ctrlBox->addWidget(m_btnPlay);
     ctrlBox->addWidget(m_btnStop);

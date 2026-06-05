@@ -5,3 +5,6 @@ deploy/
 moc_*.cpp
 CMakeCache.txt
 CMakeFiles/
+*.mp4
+extrator-movimento_autogen/
+.vscode

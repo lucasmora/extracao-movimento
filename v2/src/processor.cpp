@@ -1,73 +1,159 @@
 #include "processor.h"
-#include <deque>
 
-Processor::Processor(QObject* parent) : QObject(parent) {}
-Processor::~Processor() = default;
+Processor::Processor(QObject* parent) : QObject(parent) {
+    m_timer = new QTimer(this);
+    connect(m_timer, &QTimer::timeout, this, &Processor::onTick);
+}
+
+Processor::~Processor() {
+    pause();
+    m_cap.release();
+}
+
+bool Processor::openVideo() {
+    m_cap.release();
+    m_buffer.clear();
+    m_previewRunning = false;
+
+    if (!m_cap.open(m_inputPath.toStdString()))
+        return false;
+
+    m_fps = m_cap.get(cv::CAP_PROP_FPS);
+    m_totalFrames = static_cast<int>(m_cap.get(cv::CAP_PROP_FRAME_COUNT));
+    m_videoOpen = true;
+
+    setPosition(0);
+    return true;
+}
+
+void Processor::fillBufferUpTo(int frame) {
+    m_buffer.clear();
+    int start = std::max(0, frame - m_delayFrames);
+    m_cap.set(cv::CAP_PROP_POS_FRAMES, start);
+
+    for (int i = start; i < frame; i++) {
+        cv::Mat f;
+        if (!m_cap.read(f)) break;
+        m_buffer.push_back(f.clone());
+    }
+}
+
+void Processor::setPosition(int frame) {
+    if (!m_videoOpen) return;
+
+    bool wasRunning = m_previewRunning;
+    if (wasRunning) pause();
+
+    fillBufferUpTo(frame);
+
+    cv::Mat current;
+    if (!m_cap.read(current)) return;
+
+    cv::Mat processed = current.clone();
+    if (static_cast<int>(m_buffer.size()) == m_delayFrames) {
+        cv::Mat inverted;
+        cv::bitwise_not(m_buffer.front(), inverted);
+        cv::addWeighted(current, 0.5, inverted, 0.5, 0, processed);
+        m_buffer.pop_front();
+    }
+    m_buffer.push_back(current.clone());
+
+    emit frameProcessed(matToQImage(current), matToQImage(processed),
+                        frame + 1, m_totalFrames);
+
+    if (wasRunning) play();
+}
+
+void Processor::play() {
+    if (!m_videoOpen) return;
+    if (m_previewRunning) return;
+
+    double interval = (m_fps > 0) ? 1000.0 / m_fps : 33.0;
+    m_timer->start(static_cast<int>(interval));
+    m_previewRunning = true;
+}
+
+void Processor::pause() {
+    m_timer->stop();
+    m_previewRunning = false;
+}
+
+void Processor::stop() {
+    pause();
+    setPosition(0);
+}
+
+void Processor::onTick() {
+    if (!m_videoOpen) { pause(); return; }
+
+    cv::Mat frame;
+    if (!m_cap.read(frame)) {
+        pause();
+        emit previewFinished();
+        return;
+    }
+
+    cv::Mat processed = frame.clone();
+    if (static_cast<int>(m_buffer.size()) == m_delayFrames) {
+        cv::Mat inverted;
+        cv::bitwise_not(m_buffer.front(), inverted);
+        cv::addWeighted(frame, 0.5, inverted, 0.5, 0, processed);
+        m_buffer.pop_front();
+    }
+    m_buffer.push_back(frame.clone());
+
+    int pos = static_cast<int>(m_cap.get(cv::CAP_PROP_POS_FRAMES));
+    emit frameProcessed(matToQImage(frame), matToQImage(processed),
+                        pos, m_totalFrames);
+
+    if (m_totalFrames > 0)
+        emit progressChanged((pos * 100) / m_totalFrames);
+}
 
 QImage Processor::matToQImage(const cv::Mat& mat) {
     cv::Mat rgb;
     cv::cvtColor(mat, rgb, cv::COLOR_BGR2RGB);
-    QImage img(rgb.data, rgb.cols, rgb.rows, rgb.cols * 3, QImage::Format_RGB888);
-    return img.copy();
+    return QImage(rgb.data, rgb.cols, rgb.rows, rgb.cols * 3, QImage::Format_RGB888).copy();
 }
 
-void Processor::process() {
-    m_cancel = false;
-
+void Processor::saveVideo(const QString& outputPath) {
     cv::VideoCapture cap(m_inputPath.toStdString());
     if (!cap.isOpened()) {
-        emit errorOccurred("Erro ao abrir o video: " + m_inputPath);
-        emit finished();
+        emit errorOccurred("Erro ao abrir video para salvar");
         return;
     }
 
     double fps = cap.get(cv::CAP_PROP_FPS);
-    int width = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
-    int height = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
+    int w = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_WIDTH));
+    int h = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_HEIGHT));
     int total = static_cast<int>(cap.get(cv::CAP_PROP_FRAME_COUNT));
 
-    std::string inputStr = m_inputPath.toStdString();
-    size_t dot = inputStr.rfind('.');
-    std::string base = (dot != std::string::npos) ? inputStr.substr(0, dot) : inputStr;
-    std::string outPath = base + "_" + std::to_string(m_delayFrames) + "f.mp4";
-
     int fourcc = cv::VideoWriter::fourcc('m', 'p', '4', 'v');
-    cv::VideoWriter out(outPath, fourcc, fps, cv::Size(width, height));
+    cv::VideoWriter out(outputPath.toStdString(), fourcc, fps, cv::Size(w, h));
 
-    std::deque<cv::Mat> buffer;
+    std::deque<cv::Mat> buf;
     cv::Mat frame, processed, inverted;
-    int frameCount = 0;
+    int count = 0;
 
     while (true) {
-        if (m_cancel) break;
-
         cap >> frame;
         if (frame.empty()) break;
 
         processed = frame.clone();
-
-        if (static_cast<int>(buffer.size()) == m_delayFrames) {
-            cv::bitwise_not(buffer.front(), inverted);
+        if (static_cast<int>(buf.size()) == m_delayFrames) {
+            cv::bitwise_not(buf.front(), inverted);
             cv::addWeighted(frame, 0.5, inverted, 0.5, 0, processed);
-            buffer.pop_front();
+            buf.pop_front();
         }
-
-        buffer.push_back(frame.clone());
+        buf.push_back(frame.clone());
         out.write(processed);
 
-        ++frameCount;
-
-        emit frameProcessed(matToQImage(frame), matToQImage(processed), frameCount, total);
-
+        ++count;
         if (total > 0)
-            emit progressChanged((frameCount * 100) / total);
+            emit progressChanged((count * 100) / total);
     }
 
     cap.release();
     out.release();
-
-    if (!m_cancel)
-        emit progressChanged(100);
-
-    emit finished();
+    emit fileSaved(outputPath);
 }

@@ -9,21 +9,23 @@
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_player = new VideoPlayer(this);
+    m_previewProcessor = new Processor(this);
     setupUI();
     resize(1100, 720);
     setWindowTitle("Extrator de Movimento");
 }
 
 MainWindow::~MainWindow() {
-    if (m_workerThread && m_workerThread->isRunning()) {
-        m_processor->cancel();
-        m_workerThread->quit();
-        m_workerThread->wait();
+    m_previewProcessor->pause();
+    if (m_saveThread && m_saveThread->isRunning()) {
+        m_saveThread->quit();
+        m_saveThread->wait();
     }
 }
 
-QString MainWindow::formatTime(int frame) const {
-    int secs = static_cast<int>(frame / m_player->fps());
+QString MainWindow::formatTime(int frame, double fps) const {
+    if (fps <= 0) return "00:00";
+    int secs = static_cast<int>(frame / fps);
     return QString("%1:%2").arg(secs / 60, 2, 10, QChar('0'))
                            .arg(secs % 60, 2, 10, QChar('0'));
 }
@@ -37,26 +39,32 @@ void MainWindow::setupUI() {
     // Top controls
     auto* topRow = new QHBoxLayout();
 
-    m_btnSelect = new QPushButton("Selecionar Video...");
+    m_btnSelect = new QPushButton("Selecionar vídeo...");
     m_btnSelect->setMinimumWidth(160);
 
+    auto* delayLayout = new QHBoxLayout();
+    auto* delayLabel = new QLabel("Delay:");
+    delayLabel->setStyleSheet("color: #ccc; font-size: 13px;");
     m_spinDelay = new QSpinBox();
     m_spinDelay->setRange(1, 60);
     m_spinDelay->setValue(5);
-    m_spinDelay->setPrefix("Delay: ");
-    m_spinDelay->setSuffix(" frames");
-    m_spinDelay->setFixedWidth(150);
+    m_spinDelay->setFixedWidth(60);
+    auto* framesLabel = new QLabel("frames");
+    framesLabel->setStyleSheet("color: #ccc; font-size: 13px;");
+    delayLayout->addWidget(delayLabel);
+    delayLayout->addWidget(m_spinDelay);
+    delayLayout->addWidget(framesLabel);
 
-    m_btnProcess = new QPushButton("Processar");
-    m_btnProcess->setEnabled(false);
-    m_btnProcess->setMinimumWidth(120);
-    m_btnProcess->setStyleSheet(
+    m_btnSave = new QPushButton("Salvar");
+    m_btnSave->setEnabled(false);
+    m_btnSave->setMinimumWidth(120);
+    m_btnSave->setStyleSheet(
         "QPushButton { font-weight: bold; padding: 6px 20px; }"
     );
 
     topRow->addWidget(m_btnSelect);
-    topRow->addWidget(m_spinDelay);
-    topRow->addWidget(m_btnProcess);
+    topRow->addLayout(delayLayout);
+    topRow->addWidget(m_btnSave);
     topRow->addStretch();
 
     // Progress
@@ -66,7 +74,7 @@ void MainWindow::setupUI() {
     m_progress->setTextVisible(true);
     m_progress->setFixedHeight(24);
 
-    m_statusLabel = new QLabel("Selecione um video para comecar");
+    m_statusLabel = new QLabel("Selecione um vídeo para começar");
     m_statusLabel->setAlignment(Qt::AlignCenter);
 
     // Preview area
@@ -140,24 +148,20 @@ void MainWindow::setupUI() {
     ctrlBox->addWidget(m_slider, 1);
     ctrlBox->addWidget(m_timeLabel);
 
-    // Insert controls into original container's layout
-    auto* origLayout = qobject_cast<QVBoxLayout*>(origContainer->layout());
-    origLayout->addWidget(ctrlFrame);
-
     previewRow->addWidget(origContainer, 1);
     previewRow->addWidget(procContainer, 1);
 
-    // Assemble main
     mainLayout->addLayout(topRow);
     mainLayout->addWidget(m_progress);
     mainLayout->addWidget(m_statusLabel);
     mainLayout->addLayout(previewRow, 1);
+    mainLayout->addWidget(ctrlFrame);
 
     setCentralWidget(central);
 
-    // Connections
+    // Button connections
     connect(m_btnSelect, &QPushButton::clicked, this, &MainWindow::onSelectVideo);
-    connect(m_btnProcess, &QPushButton::clicked, this, &MainWindow::onProcessToggle);
+    connect(m_btnSave, &QPushButton::clicked, this, &MainWindow::onSave);
 
     // Player connections
     connect(m_btnPlay, &QPushButton::clicked, this, &MainWindow::onPlayPause);
@@ -168,32 +172,38 @@ void MainWindow::setupUI() {
     connect(m_player, &VideoPlayer::frameReady, this, &MainWindow::onPlayerFrame);
     connect(m_player, &VideoPlayer::positionChanged, this, &MainWindow::onPlayerPos);
 
-    // Worker thread
-    m_workerThread = new QThread(this);
-    m_processor = new Processor();
-    m_processor->moveToThread(m_workerThread);
+    // Preview processor connections
+    connect(m_previewProcessor, &Processor::frameProcessed, this, &MainWindow::onPreviewFrame);
+    connect(m_previewProcessor, &Processor::progressChanged, this, &MainWindow::onProgressChanged);
+    connect(m_previewProcessor, &Processor::previewFinished, this, &MainWindow::onPreviewFinished);
 
-    connect(m_workerThread, &QThread::started, m_processor, &Processor::process);
-    connect(m_processor, &Processor::finished, this, &MainWindow::onProcessingFinished);
-    connect(m_processor, &Processor::finished, m_workerThread, &QThread::quit);
-    connect(m_processor, &Processor::frameProcessed, this, &MainWindow::onFrameProcessed);
-    connect(m_processor, &Processor::progressChanged, this, &MainWindow::onProgressChanged);
-    connect(m_processor, &Processor::errorOccurred, this, &MainWindow::onError);
+    // Delay spinbox connection
+    connect(m_spinDelay, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            [this](int delay) {
+                m_previewProcessor->setDelayFrames(delay);
+                m_previewProcessor->setPosition(m_currentFrame);
+            });
 }
 
 void MainWindow::onSelectVideo() {
     QString path = QFileDialog::getOpenFileName(
-        this, "Selecionar Video", QString(),
-        "Videos (*.mp4 *.avi *.mov *.mkv);;Todos (*.*)");
+        this, "Selecionar vídeo", QString(),
+        "Vídeos (*.mp4 *.avi *.mov *.mkv);;Todos (*.*)");
     if (path.isEmpty()) return;
 
     m_inputPath = path;
-    m_btnSelect->setText(QFileInfo(path).fileName());
-    m_btnProcess->setEnabled(true);
-    m_statusLabel->setText("Video selecionado: " + QFileInfo(path).fileName());
+    QString fileName = QFileInfo(path).fileName();
+    m_btnSelect->setText(fileName);
+    m_btnSave->setEnabled(true);
+    m_statusLabel->setText("Vídeo selecionado: " + fileName);
     m_progress->setValue(0);
+
     m_processedView->setText("(processado)");
     m_processedView->setPixmap(QPixmap());
+
+    m_previewProcessor->setInputPath(path);
+    m_previewProcessor->setDelayFrames(m_spinDelay->value());
+    m_previewProcessor->openVideo();
 
     m_player->open(path);
     m_btnPlay->setEnabled(true);
@@ -202,18 +212,30 @@ void MainWindow::onSelectVideo() {
 }
 
 void MainWindow::onPlayPause() {
-    m_player->togglePlayPause();
+    if (!m_player->isPlaying()) {
+        m_previewProcessor->play();
+        m_player->play();
+        m_btnPlay->setText(QString::fromUtf8("\u23F8"));
+    } else {
+        m_previewProcessor->pause();
+        m_player->pause();
+        m_btnPlay->setText(QString::fromUtf8("\u25B6"));
+    }
 }
 
 void MainWindow::onStop() {
+    m_previewProcessor->stop();
     m_player->stop();
+    m_btnPlay->setText(QString::fromUtf8("\u25B6"));
 }
 
 void MainWindow::onSliderPressed() {
     if (m_player->isPlaying()) {
+        m_previewProcessor->pause();
         m_player->pause();
-        m_seeking = true;
+        m_btnPlay->setText(QString::fromUtf8("\u25B6"));
     }
+    m_seeking = true;
 }
 
 void MainWindow::onSliderReleased() {
@@ -221,7 +243,11 @@ void MainWindow::onSliderReleased() {
 }
 
 void MainWindow::onSliderMoved(int value) {
+    int totalP = m_player->totalFrames();
+    int frame = (totalP > 0) ? (value * totalP) / m_slider->maximum() : 0;
+
     m_player->seekBySlider(value, m_slider->maximum());
+    m_previewProcessor->setPosition(frame);
 }
 
 void MainWindow::onPlayerFrame(const QImage& image) {
@@ -231,64 +257,83 @@ void MainWindow::onPlayerFrame(const QImage& image) {
 }
 
 void MainWindow::onPlayerPos(int current, int total) {
+    m_currentFrame = current;
     if (!m_seeking) {
         m_slider->blockSignals(true);
         m_slider->setValue((current * m_slider->maximum()) / qMax(total, 1));
         m_slider->blockSignals(false);
     }
-    m_timeLabel->setText(formatTime(current) + " / " + formatTime(total));
+    m_timeLabel->setText(formatTime(current, m_player->fps())
+                         + " / " + formatTime(total, m_player->fps()));
 }
 
-void MainWindow::onProcessToggle() {
-    if (m_processing) {
-        m_processor->cancel();
-        m_statusLabel->setText("Cancelando...");
-        return;
-    }
-
-    if (m_inputPath.isEmpty()) return;
-
-    m_processing = true;
-    m_btnProcess->setText("Cancelar");
-    m_btnSelect->setEnabled(false);
-    m_spinDelay->setEnabled(false);
-    m_progress->setValue(0);
-    m_processedView->setText("(processando...)");
-
-    m_processor->setInputPath(m_inputPath);
-    m_processor->setDelayFrames(m_spinDelay->value());
-
-    m_workerThread->start();
-}
-
-void MainWindow::onFrameProcessed(QImage original, QImage processed, int current, int total) {
-    if (!original.isNull()) {
-        QSize sz = m_originalView->size();
-        m_originalView->setPixmap(
-            QPixmap::fromImage(original).scaled(sz, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    }
-    if (!processed.isNull()) {
-        QSize sz = m_processedView->size();
-        m_processedView->setPixmap(
-            QPixmap::fromImage(processed).scaled(sz, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    }
+void MainWindow::onPreviewFrame(QImage original, QImage processed, int current, int total) {
+    Q_UNUSED(original)
+    QSize sz = m_processedView->size();
+    m_processedView->setPixmap(
+        QPixmap::fromImage(processed).scaled(sz, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     m_statusLabel->setText(QString("Processando: %1 / %2 frames").arg(current).arg(total));
-    QApplication::processEvents();
 }
 
 void MainWindow::onProgressChanged(int percent) {
     m_progress->setValue(percent);
 }
 
-void MainWindow::onProcessingFinished() {
-    m_processing = false;
-    m_btnProcess->setText("Processar");
-    m_btnSelect->setEnabled(true);
-    m_spinDelay->setEnabled(true);
+void MainWindow::onPreviewFinished() {
     m_statusLabel->setText("Processamento concluido!");
+    m_btnPlay->setText(QString::fromUtf8("\u25B6"));
 }
 
-void MainWindow::onError(const QString& msg) {
-    QMessageBox::warning(this, "Erro", msg);
-    m_statusLabel->setText("Erro: " + msg);
+void MainWindow::onSave() {
+    if (m_saving) return;
+
+    QString base = QFileInfo(m_inputPath).completeBaseName();
+    QString outPath = QFileInfo(m_inputPath).absolutePath()
+                      + "/" + base + "_" + QString::number(m_spinDelay->value()) + "f.mp4";
+
+    m_saving = true;
+    m_btnSave->setEnabled(false);
+    m_btnPlay->setEnabled(false);
+    m_slider->setEnabled(false);
+    m_statusLabel->setText("Salvando video...");
+
+    m_saveThread = new QThread(this);
+    m_saveProcessor = new Processor();
+    m_saveProcessor->setInputPath(m_inputPath);
+    m_saveProcessor->setDelayFrames(m_spinDelay->value());
+    m_saveProcessor->moveToThread(m_saveThread);
+
+    connect(m_saveThread, &QThread::started, m_saveProcessor, [this, outPath]() {
+        m_saveProcessor->saveVideo(outPath);
+    });
+    connect(m_saveProcessor, &Processor::fileSaved, this, &MainWindow::onFileSaved);
+    connect(m_saveProcessor, &Processor::progressChanged, this, &MainWindow::onProgressChanged);
+    connect(m_saveProcessor, &Processor::errorOccurred, this, &MainWindow::onSaveError);
+    connect(m_saveProcessor, &Processor::fileSaved, m_saveThread, &QThread::quit);
+    connect(m_saveProcessor, &Processor::errorOccurred, m_saveThread, &QThread::quit);
+    connect(m_saveThread, &QThread::finished, this, [this]() {
+        m_saveThread->deleteLater();
+        m_saveProcessor->deleteLater();
+        m_saveThread = nullptr;
+        m_saveProcessor = nullptr;
+        m_saving = false;
+
+        m_btnSave->setEnabled(true);
+        m_btnPlay->setEnabled(true);
+        m_slider->setEnabled(true);
+        m_progress->setValue(100);
+    });
+
+    m_saveThread->start();
+}
+
+void MainWindow::onFileSaved(const QString& path) {
+    QMessageBox::information(this, "Sucesso",
+        "Video salvo em:\n" + path);
+    m_statusLabel->setText("Vídeo salvo em: " + path);
+}
+
+void MainWindow::onSaveError(const QString& msg) {
+    QMessageBox::warning(this, "Erro ao salvar", msg);
+    m_statusLabel->setText("Erro ao salvar: " + msg);
 }

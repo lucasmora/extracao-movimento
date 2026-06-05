@@ -18,26 +18,29 @@ public:
 
 private slots:
     void onSelectVideo();
-    void onProcessToggle();
-    void onFrameProcessed(QImage original, QImage processed, int current, int total);
-    void onProgressChanged(int percent);
-    void onProcessingFinished();
-    void onError(const QString& msg);
+    void onSave();
 
     void onPlayPause();
     void onStop();
     void onSliderPressed();
     void onSliderReleased();
     void onSliderMoved(int value);
+
     void onPlayerFrame(const QImage& image);
     void onPlayerPos(int current, int total);
 
+    void onPreviewFrame(QImage original, QImage processed, int current, int total);
+    void onProgressChanged(int percent);
+    void onFileSaved(const QString& path);
+    void onPreviewFinished();
+    void onSaveError(const QString& msg);
+
 private:
     void setupUI();
-    QString formatTime(int frame) const;
+    QString formatTime(int frame, double fps) const;
 
     QPushButton*  m_btnSelect;
-    QPushButton*  m_btnProcess;
+    QPushButton*  m_btnSave;
     QSpinBox*     m_spinDelay;
     QProgressBar* m_progress;
     QLabel*       m_statusLabel;
@@ -51,8 +54,11 @@ private:
     QLabel*       m_timeLabel;
     bool          m_seeking = false;
 
-    QThread*   m_workerThread = nullptr;
-    Processor* m_processor    = nullptr;
-    QString    m_inputPath;
-    bool       m_processing   = false;
+    Processor*    m_previewProcessor;
+    QString       m_inputPath;
+    bool          m_saving = false;
+
+    QThread*      m_saveThread = nullptr;
+    Processor*    m_saveProcessor = nullptr;
+    int           m_currentFrame = 0;
 };

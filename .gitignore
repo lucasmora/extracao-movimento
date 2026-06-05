@@ -1,0 +1,7 @@
+build/
+deploy/
+*.exe
+*.obj
+moc_*.cpp
+CMakeCache.txt
+CMakeFiles/
